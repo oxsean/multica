@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Copy, Check, AlertTriangle } from "lucide-react";
+import { copyText } from "@multica/ui/lib/clipboard";
 import { Button } from "@multica/ui/components/ui/button";
 import { Card, CardContent } from "@multica/ui/components/ui/card";
 import { Input } from "@multica/ui/components/ui/input";
@@ -41,12 +42,25 @@ export function GiteaTab() {
   const connections = data?.connections ?? [];
   const configured = data?.configured ?? false;
   const canManage = data?.can_manage === true;
+  const webhookUrl = data?.webhook_url ?? null;
+  const webhookConfigured = data?.webhook_configured === true;
 
   const [baseUrl, setBaseUrl] = useState("");
   const [token, setToken] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [disconnectTarget, setDisconnectTarget] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopyWebhook() {
+    const value = webhookUrl ?? "/api/webhooks/gitea";
+    if (await copyText(value)) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } else {
+      toast.error(t(($) => $.gitea.webhook_copy_failed));
+    }
+  }
 
   async function handleConnect() {
     if (connecting) return;
@@ -190,6 +204,64 @@ export function GiteaTab() {
           </CardContent>
         </Card>
       </section>
+
+      {configured && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold">{t(($) => $.gitea.section_webhook)}</h2>
+          <Card>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                {t(($) => $.gitea.webhook_description)}
+              </p>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">
+                  {t(($) => $.gitea.webhook_url_label)}
+                </Label>
+                <div className="flex items-center gap-2">
+                  <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1.5 text-xs">
+                    {webhookUrl ?? t(($) => $.gitea.webhook_url_host_fallback)}
+                  </code>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyWebhook}
+                    title={t(($) => $.gitea.webhook_copy)}
+                  >
+                    {copied ? (
+                      <Check className="h-3.5 w-3.5 text-emerald-500" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t(($) => $.gitea.webhook_meta)}
+                </p>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                {t(($) => $.gitea.webhook_secret_hint)}{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
+                  MULTICA_GITEA_WEBHOOK_SECRET
+                </code>
+              </p>
+
+              {!webhookConfigured && (
+                <p className="flex items-start gap-1.5 text-xs text-amber-600">
+                  <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                  <span>
+                    {t(($) => $.gitea.webhook_unconfigured)}{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
+                      MULTICA_GITEA_WEBHOOK_SECRET
+                    </code>
+                  </span>
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+      )}
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold">{t(($) => $.gitea.section_features)}</h2>

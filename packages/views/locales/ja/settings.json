@@ -382,7 +382,16 @@
     "toast_connected": "Gitea インスタンスを接続しました",
     "toast_connect_failed": "Gitea インスタンスを接続できませんでした",
     "toast_disconnected": "Gitea インスタンスの接続を解除しました",
-    "toast_disconnect_failed": "Gitea インスタンスの接続を解除できませんでした"
+    "toast_disconnect_failed": "Gitea インスタンスの接続を解除できませんでした",
+    "section_webhook": "Webhook",
+    "webhook_description": "ミラーしたい各 Gitea リポジトリにこの webhook を追加します：Repo → Settings → Webhooks → Add Webhook → Gitea。",
+    "webhook_url_label": "Payload URL",
+    "webhook_url_host_fallback": "<あなたの MULTICA_PUBLIC_URL>/api/webhooks/gitea",
+    "webhook_meta": "Content Type：application/json · トリガー：Pull Request イベント。",
+    "webhook_secret_hint": "Secret にはこのデプロイに設定された次の値を指定します：",
+    "webhook_unconfigured": "このデプロイでは webhook secret が未設定のため、エンドポイントは 503 を返します。運用者が次を設定するまで PR ミラーリングは無効です：",
+    "webhook_copy": "URL をコピー",
+    "webhook_copy_failed": "webhook URL のコピーに失敗しました"
   },
   "lark": {
     "section_title": "Lark",

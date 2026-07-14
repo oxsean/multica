@@ -389,7 +389,16 @@
     "toast_connected": "Gitea instance connected",
     "toast_connect_failed": "Failed to connect Gitea instance",
     "toast_disconnected": "Gitea instance disconnected",
-    "toast_disconnect_failed": "Failed to disconnect Gitea instance"
+    "toast_disconnect_failed": "Failed to disconnect Gitea instance",
+    "section_webhook": "Webhook",
+    "webhook_description": "Add this webhook on each Gitea repo you want mirrored: Repo → Settings → Webhooks → Add Webhook → Gitea.",
+    "webhook_url_label": "Payload URL",
+    "webhook_url_host_fallback": "<your MULTICA_PUBLIC_URL>/api/webhooks/gitea",
+    "webhook_meta": "Content type: application/json · Trigger: Pull Request events.",
+    "webhook_secret_hint": "Set the webhook Secret to the value of",
+    "webhook_unconfigured": "No webhook secret is set on this deployment, so the endpoint returns 503 and PR mirroring stays off until an operator sets",
+    "webhook_copy": "Copy URL",
+    "webhook_copy_failed": "Failed to copy the webhook URL"
   },
   "lark": {
     "section_title": "Lark",

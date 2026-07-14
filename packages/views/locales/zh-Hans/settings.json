@@ -389,7 +389,16 @@
     "toast_connected": "已连接 Gitea 实例",
     "toast_connect_failed": "连接 Gitea 实例失败",
     "toast_disconnected": "已断开 Gitea 实例",
-    "toast_disconnect_failed": "断开 Gitea 实例失败"
+    "toast_disconnect_failed": "断开 Gitea 实例失败",
+    "section_webhook": "Webhook",
+    "webhook_description": "在每个要镜像的 Gitea 仓库里添加此 webhook：Repo → Settings → Webhooks → Add Webhook → Gitea。",
+    "webhook_url_label": "Payload URL",
+    "webhook_url_host_fallback": "<你的 MULTICA_PUBLIC_URL>/api/webhooks/gitea",
+    "webhook_meta": "Content Type：application/json · 触发事件：Pull Request。",
+    "webhook_secret_hint": "Secret 填写该部署配置的",
+    "webhook_unconfigured": "当前部署未设置 webhook secret，接口会返回 503，PR 镜像在运维设置以下变量前不会生效：",
+    "webhook_copy": "复制 URL",
+    "webhook_copy_failed": "复制 webhook URL 失败"
   },
   "lark": {
     "section_title": "飞书",

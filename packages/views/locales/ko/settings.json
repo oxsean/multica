@@ -382,7 +382,16 @@
     "toast_connected": "Gitea 인스턴스를 연결했습니다",
     "toast_connect_failed": "Gitea 인스턴스를 연결하지 못했습니다",
     "toast_disconnected": "Gitea 인스턴스 연결을 해제했습니다",
-    "toast_disconnect_failed": "Gitea 인스턴스 연결을 해제하지 못했습니다"
+    "toast_disconnect_failed": "Gitea 인스턴스 연결을 해제하지 못했습니다",
+    "section_webhook": "Webhook",
+    "webhook_description": "미러링할 각 Gitea 저장소에 이 webhook을 추가하세요: Repo → Settings → Webhooks → Add Webhook → Gitea.",
+    "webhook_url_label": "Payload URL",
+    "webhook_url_host_fallback": "<당신의 MULTICA_PUBLIC_URL>/api/webhooks/gitea",
+    "webhook_meta": "Content Type: application/json · 트리거: Pull Request 이벤트.",
+    "webhook_secret_hint": "Secret에는 이 배포에 설정된 다음 값을 입력하세요:",
+    "webhook_unconfigured": "이 배포에는 webhook secret이 설정되지 않아 엔드포인트가 503을 반환하며, 운영자가 다음을 설정하기 전까지 PR 미러링이 비활성화됩니다:",
+    "webhook_copy": "URL 복사",
+    "webhook_copy_failed": "webhook URL 복사 실패"
   },
   "repositories": {
     "section_title": "저장소",

@@ -232,10 +232,19 @@ func (h *Handler) ListGiteaConnections(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		out = append(out, giteaConnectionToResponse(row))
 	}
+	// webhook_url is the address operators paste into each Gitea repo's webhook.
+	// Null when MULTICA_PUBLIC_URL is unset — the host is not knowable server-side
+	// then, so the UI falls back to showing the path only.
+	var webhookURL any
+	if h.cfg.PublicURL != "" {
+		webhookURL = h.cfg.PublicURL + "/api/webhooks/gitea"
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"connections": out,
-		"configured":  h.GiteaSecretBox != nil,
-		"can_manage":  canManage,
+		"connections":        out,
+		"configured":         h.GiteaSecretBox != nil,
+		"can_manage":         canManage,
+		"webhook_url":        webhookURL,
+		"webhook_configured": giteaWebhookSecret() != "",
 	})
 }
 

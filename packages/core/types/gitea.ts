@@ -15,6 +15,13 @@ export interface ListGiteaConnectionsResponse {
   /** Whether the caller can connect / disconnect. Non-admin members get `false`.
    * Older backends omit the field; treat absence as `false` for read-only safety. */
   can_manage?: boolean;
+  /** Fully-qualified webhook endpoint to paste into each Gitea repo
+   * (`<MULTICA_PUBLIC_URL>/api/webhooks/gitea`). Null when the deployment has no
+   * public URL configured; the UI then shows the path only. */
+  webhook_url?: string | null;
+  /** Whether `MULTICA_GITEA_WEBHOOK_SECRET` is set. When false the endpoint
+   * returns 503, so the UI warns that PR mirroring will not work yet. */
+  webhook_configured?: boolean;
 }
 
 export interface GiteaConnectRequest {
