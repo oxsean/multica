@@ -35,6 +35,8 @@ type CreateGiteaConnectionParams struct {
 	ConnectedByID    pgtype.UUID `json:"connected_by_id"`
 }
 
+// Re-connecting the same instance (same base_url) refreshes the stored PAT and
+// account metadata rather than erroring, matching the GitHub upsert behaviour.
 func (q *Queries) CreateGiteaConnection(ctx context.Context, arg CreateGiteaConnectionParams) (GiteaConnection, error) {
 	row := q.db.QueryRow(ctx, createGiteaConnection,
 		arg.WorkspaceID,
@@ -73,12 +75,57 @@ func (q *Queries) DeleteGiteaConnection(ctx context.Context, arg DeleteGiteaConn
 	return err
 }
 
+const listGiteaConnectionsByBaseURL = `-- name: ListGiteaConnectionsByBaseURL :many
+SELECT id, workspace_id, base_url, token_encrypted, account_login, account_avatar_url, connected_by_id, created_at, updated_at FROM gitea_connection
+WHERE base_url = $1
+ORDER BY created_at ASC
+`
+
+// Every workspace connected to the delivering instance. The webhook has no
+// installation id (Gitea has no App concept), so a delivery is attributed by
+// its instance base URL — the scheme+host derived from the payload's repo
+// html_url — and mirrored into each bound workspace, mirroring GitHub's
+// one-installation-many-workspaces fan-out.
+func (q *Queries) ListGiteaConnectionsByBaseURL(ctx context.Context, baseUrl string) ([]GiteaConnection, error) {
+	rows, err := q.db.Query(ctx, listGiteaConnectionsByBaseURL, baseUrl)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GiteaConnection{}
+	for rows.Next() {
+		var i GiteaConnection
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.BaseUrl,
+			&i.TokenEncrypted,
+			&i.AccountLogin,
+			&i.AccountAvatarUrl,
+			&i.ConnectedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listGiteaConnectionsByWorkspace = `-- name: ListGiteaConnectionsByWorkspace :many
+
 SELECT id, workspace_id, base_url, token_encrypted, account_login, account_avatar_url, connected_by_id, created_at, updated_at FROM gitea_connection
 WHERE workspace_id = $1
 ORDER BY created_at ASC
 `
 
+// =====================
+// Gitea Connection
+// =====================
 func (q *Queries) ListGiteaConnectionsByWorkspace(ctx context.Context, workspaceID pgtype.UUID) ([]GiteaConnection, error) {
 	rows, err := q.db.Query(ctx, listGiteaConnectionsByWorkspace, workspaceID)
 	if err != nil {

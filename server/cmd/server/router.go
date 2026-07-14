@@ -719,6 +719,10 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 	// HMAC-SHA256 signature in the handler) and post-install setup callback.
 	r.Post("/api/webhooks/github", h.HandleGitHubWebhook)
 	r.Get("/api/github/setup", h.GitHubSetupCallback)
+	// Gitea repo webhook (no Multica auth — authenticated via the raw-hex
+	// HMAC-SHA256 X-Gitea-Signature in the handler; workspace attribution is
+	// by instance base URL, not request headers).
+	r.Post("/api/webhooks/gitea", h.HandleGiteaWebhook)
 	// Slack OAuth callback (no Multica auth in the path — it is hit by Slack's
 	// browser redirect; the workspace/agent/initiator are recovered from the
 	// sealed state). It exchanges the code, upserts the install, then bounces

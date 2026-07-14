@@ -7,6 +7,16 @@ SELECT * FROM gitea_connection
 WHERE workspace_id = $1
 ORDER BY created_at ASC;
 
+-- name: ListGiteaConnectionsByBaseURL :many
+-- Every workspace connected to the delivering instance. The webhook has no
+-- installation id (Gitea has no App concept), so a delivery is attributed by
+-- its instance base URL — the scheme+host derived from the payload's repo
+-- html_url — and mirrored into each bound workspace, mirroring GitHub's
+-- one-installation-many-workspaces fan-out.
+SELECT * FROM gitea_connection
+WHERE base_url = $1
+ORDER BY created_at ASC;
+
 -- name: CreateGiteaConnection :one
 -- Re-connecting the same instance (same base_url) refreshes the stored PAT and
 -- account metadata rather than erroring, matching the GitHub upsert behaviour.
