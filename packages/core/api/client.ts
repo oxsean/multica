@@ -114,6 +114,9 @@ import type {
   GitHubPullRequest,
   ListGitHubInstallationsResponse,
   GitHubConnectResponse,
+  GiteaConnection,
+  ListGiteaConnectionsResponse,
+  GiteaConnectRequest,
   ListLarkInstallationsResponse,
   BeginLarkInstallResponse,
   LarkInstallStatusResponse,
@@ -2408,6 +2411,24 @@ export class ApiClient {
 
   async listIssuePullRequests(issueId: string): Promise<{ pull_requests: GitHubPullRequest[] }> {
     return this.fetch(`/api/issues/${issueId}/pull-requests`);
+  }
+
+  // Gitea integration
+  async listGiteaConnections(workspaceId: string): Promise<ListGiteaConnectionsResponse> {
+    return this.fetch(`/api/workspaces/${workspaceId}/gitea/connections`);
+  }
+
+  async giteaConnect(workspaceId: string, req: GiteaConnectRequest): Promise<GiteaConnection> {
+    return this.fetch(`/api/workspaces/${workspaceId}/gitea/connections`, {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+  }
+
+  async deleteGiteaConnection(workspaceId: string, connectionId: string): Promise<void> {
+    await this.fetch(`/api/workspaces/${workspaceId}/gitea/connections/${connectionId}`, {
+      method: "DELETE",
+    });
   }
 
   // Lark integration
