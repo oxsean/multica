@@ -1,14 +1,77 @@
 package handler
 
 import (
+	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/multica-ai/multica/server/internal/util/secretbox"
+	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
+
+func TestVerifyGiteaSignature(t *testing.T) {
+	secret := "gitea-shared-secret"
+	body := []byte(`{"action":"opened"}`)
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	good := hex.EncodeToString(mac.Sum(nil)) // raw hex, no "sha256=" prefix
+
+	if !verifyGiteaSignature(secret, good, body) {
+		t.Error("expected valid signature to verify")
+	}
+	if verifyGiteaSignature(secret, "sha256="+good, body) {
+		t.Error("expected the GitHub-style prefixed form to fail (Gitea is raw hex)")
+	}
+	if verifyGiteaSignature(secret, "deadbeef", body) {
+		t.Error("expected wrong digest to fail")
+	}
+	if verifyGiteaSignature(secret, "nothex", body) {
+		t.Error("expected non-hex to fail")
+	}
+	if verifyGiteaSignature(secret, "", body) {
+		t.Error("expected empty header to fail")
+	}
+	if verifyGiteaSignature("other-secret", good, body) {
+		t.Error("expected wrong secret to fail")
+	}
+}
+
+func TestGiteaMergeableState(t *testing.T) {
+	yes, no := true, false
+	if got := giteaMergeableState(nil); got != "" {
+		t.Errorf("nil mergeable = %q, want empty", got)
+	}
+	if got := giteaMergeableState(&yes); got != "clean" {
+		t.Errorf("true mergeable = %q, want clean", got)
+	}
+	if got := giteaMergeableState(&no); got != "dirty" {
+		t.Errorf("false mergeable = %q, want dirty", got)
+	}
+}
+
+func TestGiteaInstanceBaseURL(t *testing.T) {
+	cases := []struct {
+		body string
+		want string
+	}{
+		{`{"repository":{"html_url":"https://gitea.example.com/acme/widget"}}`, "https://gitea.example.com"},
+		{`{"repository":{"html_url":"http://localhost:3000/o/r"}}`, "http://localhost:3000"},
+		{`{"repository":{"html_url":"not a url"}}`, ""},
+		{`{"repository":{}}`, ""},
+		{`not json`, ""},
+	}
+	for _, c := range cases {
+		if got := giteaInstanceBaseURL([]byte(c.body)); got != c.want {
+			t.Errorf("giteaInstanceBaseURL(%q) = %q, want %q", c.body, got, c.want)
+		}
+	}
+}
 
 func TestNormalizeGiteaBaseURL(t *testing.T) {
 	cases := []struct {
@@ -170,5 +233,147 @@ func TestGiteaConnect_PersistsEncrypted(t *testing.T) {
 	testPool.QueryRow(ctx, `SELECT count(*) FROM gitea_connection WHERE workspace_id = $1`, testWorkspaceID).Scan(&count)
 	if count != 1 {
 		t.Fatalf("expected 1 connection after reconnect, got %d", count)
+	}
+}
+
+// TestGiteaWebhook_MergedPR_AdvancesLinkedIssueToDone drives the Gitea webhook
+// end to end: a workspace connection for the delivering instance, a merged
+// pull_request delivery whose body declares closing intent, and the shared
+// mirror pipeline. It asserts the PR is mirrored under provider='gitea' and the
+// linked issue advances to done — the DoD's merge→Done reuse. It also checks a
+// bad signature is rejected and a repeat delivery stays idempotent.
+func TestGiteaWebhook_MergedPR_AdvancesLinkedIssueToDone(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("handler test fixture not initialized (no DB?)")
+	}
+	ctx := context.Background()
+	secret := "gitea-webhook-secret"
+	t.Setenv("MULTICA_GITEA_WEBHOOK_SECRET", secret)
+	const instance = "http://gitea.local"
+
+	w := httptest.NewRecorder()
+	req := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
+		"title":  "Gitea PR auto-merge test",
+		"status": "in_progress",
+	})
+	testHandler.CreateIssue(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("CreateIssue: %d %s", w.Code, w.Body.String())
+	}
+	var created IssueResponse
+	json.NewDecoder(w.Body).Decode(&created)
+
+	t.Cleanup(func() {
+		testPool.Exec(ctx, `DELETE FROM issue_pull_request WHERE issue_id = $1`, created.ID)
+		testPool.Exec(ctx, `DELETE FROM github_pull_request WHERE workspace_id = $1`, testWorkspaceID)
+		testPool.Exec(ctx, `DELETE FROM gitea_connection WHERE workspace_id = $1`, testWorkspaceID)
+		testPool.Exec(ctx, `DELETE FROM activity_log WHERE issue_id = $1`, created.ID)
+		testPool.Exec(ctx, `DELETE FROM issue WHERE id = $1`, created.ID)
+	})
+
+	// A connection for the delivering instance so the webhook can attribute the
+	// delivery to this workspace. The webhook path never reads the token, so a
+	// placeholder sealed value is fine here.
+	if _, err := testHandler.Queries.CreateGiteaConnection(ctx, db.CreateGiteaConnectionParams{
+		WorkspaceID:    parseUUID(testWorkspaceID),
+		BaseUrl:        instance,
+		TokenEncrypted: []byte("placeholder"),
+		AccountLogin:   "cici",
+	}); err != nil {
+		t.Fatalf("CreateGiteaConnection: %v", err)
+	}
+
+	mergeable := true
+	body, _ := json.Marshal(map[string]any{
+		"action": "closed",
+		"pull_request": map[string]any{
+			"number":        42,
+			"html_url":      instance + "/acme/widget/pulls/42",
+			"title":         "Fix login " + created.Identifier,
+			"body":          "Closes " + created.Identifier,
+			"state":         "closed",
+			"draft":         false,
+			"merged":        true,
+			"mergeable":     mergeable,
+			"merged_at":     "2026-04-29T00:00:00Z",
+			"closed_at":     "2026-04-29T00:00:00Z",
+			"created_at":    "2026-04-28T00:00:00Z",
+			"updated_at":    "2026-04-29T00:00:00Z",
+			"head":          map[string]any{"ref": "fix/login", "sha": "abc123"},
+			"user":          map[string]any{"login": "cici", "avatar_url": ""},
+			"additions":     3,
+			"deletions":     1,
+			"changed_files": 2,
+		},
+		"repository": map[string]any{
+			"name":     "widget",
+			"html_url": instance + "/acme/widget",
+			"owner":    map[string]any{"login": "acme"},
+		},
+	})
+
+	fire := func(sig string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		hookReq := httptest.NewRequest("POST", "/api/webhooks/gitea", bytes.NewReader(body))
+		hookReq.Header.Set("X-Gitea-Event", "pull_request")
+		hookReq.Header.Set("X-Gitea-Signature", sig)
+		testHandler.HandleGiteaWebhook(rec, hookReq)
+		return rec
+	}
+
+	// Bad signature is rejected before any mirroring happens.
+	if rec := fire("deadbeef"); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("bad signature: expected 401, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	sig := hex.EncodeToString(mac.Sum(nil))
+	if rec := fire(sig); rec.Code != http.StatusAccepted {
+		t.Fatalf("webhook: expected 202, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	pr, err := testHandler.Queries.GetGitHubPullRequest(ctx, db.GetGitHubPullRequestParams{
+		WorkspaceID: parseUUID(testWorkspaceID),
+		Provider:    "gitea",
+		BaseHost:    "gitea.local",
+		RepoOwner:   "acme",
+		RepoName:    "widget",
+		PrNumber:    42,
+	})
+	if err != nil {
+		t.Fatalf("GetGitHubPullRequest: %v", err)
+	}
+	if pr.State != "merged" {
+		t.Errorf("expected pr state merged, got %q", pr.State)
+	}
+	if pr.MergeableState.String != "clean" {
+		t.Errorf("expected mergeable_state clean, got %q", pr.MergeableState.String)
+	}
+
+	linked, err := testHandler.Queries.ListPullRequestsByIssue(ctx, parseUUID(created.ID))
+	if err != nil {
+		t.Fatalf("ListPullRequestsByIssue: %v", err)
+	}
+	if len(linked) != 1 {
+		t.Fatalf("expected 1 linked PR, got %d", len(linked))
+	}
+
+	updated, err := testHandler.Queries.GetIssue(ctx, parseUUID(created.ID))
+	if err != nil {
+		t.Fatalf("GetIssue: %v", err)
+	}
+	if updated.Status != "done" {
+		t.Errorf("expected issue status 'done', got %q", updated.Status)
+	}
+
+	// Repeat delivery is idempotent: still one PR row, one link, still done.
+	if rec := fire(sig); rec.Code != http.StatusAccepted {
+		t.Fatalf("replay webhook: expected 202, got %d", rec.Code)
+	}
+	var prCount int
+	testPool.QueryRow(ctx, `SELECT count(*) FROM github_pull_request WHERE workspace_id = $1 AND provider = 'gitea'`, testWorkspaceID).Scan(&prCount)
+	if prCount != 1 {
+		t.Errorf("expected 1 gitea PR row after replay, got %d", prCount)
 	}
 }
